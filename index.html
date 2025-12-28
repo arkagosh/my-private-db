@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Internal Data Portal</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        body { background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); min-height: 100vh; font-family: 'Segoe UI', sans-serif; }
+        .glass-panel { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border-radius: 16px; box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1); border: 1px solid rgba(255, 255, 255, 0.3); }
+        .fade-in { animation: fadeIn 0.5s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .profile-card:hover { transform: translateY(-5px); box-shadow: 0 10px 25px rgba(0,0,0,0.15); }
+        .loader { border-top-color: #3B82F6; animation: spinner 1.5s linear infinite; }
+        @keyframes spinner { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="flex items-center justify-center p-4">
+
+    <div id="formView" class="glass-panel w-full max-w-lg p-8 fade-in hidden">
+        <div class="text-center mb-8">
+            <h2 class="text-2xl font-bold text-gray-800">Secure Data Entry</h2>
+            <p class="text-gray-500 text-sm">Internal Use Only</p>
+        </div>
+        <form id="dataForm" class="space-y-4">
+            <div class="flex flex-col items-center justify-center w-full">
+                <label for="photoInput" class="flex flex-col items-center justify-center w-full h-32 border-2 border-blue-300 border-dashed rounded-lg cursor-pointer bg-blue-50 hover:bg-blue-100 transition">
+                    <div class="flex flex-col items-center justify-center pt-5 pb-6">
+                        <i class="fas fa-cloud-upload-alt text-2xl text-blue-500 mb-2"></i>
+                        <p class="text-sm text-gray-500">Click to upload profile photo</p>
+                    </div>
+                    <input id="photoInput" type="file" class="hidden" accept="image/*" required />
+                </label>
+                <p id="fileName" class="text-xs text-gray-500 mt-2"></p>
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <input type="text" id="fullName" placeholder="Full Name" class="w-full p-3 border rounded-lg" required>
+                <select id="gender" class="w-full p-3 border rounded-lg">
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                </select>
+            </div>
+            <input type="text" id="role" placeholder="Position / Role" class="w-full p-3 border rounded-lg" required>
+            <input type="text" id="social" placeholder="Social Media Username" class="w-full p-3 border rounded-lg">
+            <textarea id="address" placeholder="Address" class="w-full p-3 border rounded-lg" rows="2"></textarea>
+            <button type="submit" id="submitBtn" class="w-full bg-blue-600 text-white p-3 rounded-lg font-semibold hover:bg-blue-700 transition">Submit Record</button>
+        </form>
+    </div>
+
+    <div id="adminView" class="w-full max-w-6xl fade-in hidden">
+        <h1 class="text-3xl font-bold text-gray-800 mb-6">Admin Dashboard</h1>
+        <div id="gridContainer" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6"></div>
+    </div>
+
+    <div id="detailModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center p-4 z-50">
+        <div class="glass-panel w-full max-w-md p-6 relative fade-in">
+            <button onclick="closeModal()" class="absolute top-4 right-4 text-gray-500">X</button>
+            <div class="text-center">
+                <img id="modalImg" src="" class="w-32 h-32 rounded-full mx-auto object-cover border-4 border-white mb-4">
+                <h2 id="modalName" class="text-2xl font-bold"></h2>
+                <p id="modalRole" class="text-blue-600 mb-4"></p>
+            </div>
+            <div id="modalDetails" class="space-y-2 text-sm text-gray-600 bg-gray-50 p-4 rounded-lg">
+                <p>Gender: <span id="modalGender"></span></p>
+                <p>Social: <span id="modalSocial"></span></p>
+                <p>Address: <span id="modalAddress"></span></p>
+            </div>
+        </div>
+    </div>
+
+    <div id="loadingOverlay" class="fixed inset-0 bg-white bg-opacity-80 hidden flex items-center justify-center z-50">
+        <div class="loader ease-linear rounded-full border-4 border-t-4 border-gray-200 h-12 w-12"></div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
+        import { getFirestore, collection, addDoc, getDocs } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
+        import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-storage.js";
+
+        // আপনার ৩ নম্বর স্ক্রিনশটের তথ্য এখানে বসানো হয়েছে
+        const firebaseConfig = {
+            apiKey: "AIzaSyC4v6rZ00zdF0t7-wK9c8A0lslqsFhjukI",
+            authDomain: "employeedb-29744.firebaseapp.com",
+            projectId: "employeedb-29744",
+            storageBucket: "employeedb-29744.firebasestorage.app",
+            messagingSenderId: "459207355622",
+            appId: "1:459207355622:web:37dae483ee0b3773261f27",
+            measurementId: "G-F6S4HQ9R7R"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const storage = getStorage(app);
+
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('mode') === 'admin') {
+            document.getElementById('adminView').classList.remove('hidden');
+            loadData();
+        } else {
+            document.getElementById('formView').classList.remove('hidden');
+        }
+
+        photoInput.addEventListener('change', (e) => { if(e.target.files[0]) fileName.innerText = e.target.files[0].name; });
+
+        document.getElementById('dataForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            loadingOverlay.classList.remove('hidden');
+            try {
+                const file = photoInput.files[0];
+                const storageRef = ref(storage, 'photos/' + Date.now() + '-' + file.name);
+                await uploadBytes(storageRef, file);
+                const photoURL = await getDownloadURL(storageRef);
+
+                await addDoc(collection(db, "employees"), {
+                    fullName: document.getElementById('fullName').value,
+                    role: document.getElementById('role').value,
+                    gender: document.getElementById('gender').value,
+                    social: document.getElementById('social').value,
+                    address: document.getElementById('address').value,
+                    photoURL: photoURL
+                });
+                alert("Success
